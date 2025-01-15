@@ -1,0 +1,168 @@
+
+####___ACUM-3___Periodic_Variant__####
+
+This is a GPU-optimized ACUM-2 leaving out the compact chord and Overturns options. Geometric and Aerodynamic data at acoustic surfaces is obtained using HAMSTR outputs. CUDA is used to parallelize the acoustic computation on GPU in 3D, i.e., time steps, observers, and elements. Binning approach is used to parallelize time steps.    
+
+
+$$__Input_Files__$$
+
+There are 3 types of input files:
+	1. "input" file - define variables
+	2. "obs.dat" file - observer locations
+	3. "surfaces/surface_*.dat" files - acoustic surface data
+	4. "input_BB" file - required when calculating broadband noise
+	5. "BB_inputs/BB_surface_*.dat" files - broadband surface data 
+	6. "BB_inputs/BB_table_*.dat" files - 2D CFD data for airfoil section
+
+1. "input" file
+
+***Environmental
+a0              -	speed of sound in m/s
+rhoRef          -	reference density in kg/m
+pRef            -	reference pressure in Pa
+
+***Geometric
+oM              -	propeller rotational speed in rad/s
+nSurf           -	number of acoustic surfaces
+nTime           -	number of time steps
+dPsi            -	change in azimuth equivalent to a time step (in degrees)
+Minf            -	freestream Mach number (or forward flight Mach number)
+Mref		-	Reference Mach Number used for CFD data conversion
+xy_angle,xz_angle     such that
+	u_inf = m_inf*cos(xy_angle*pi/180)*    cos(xz_angle*pi/180)
+        v_inf = m_inf*sin(xy_angle*pi/180)
+        w_inf = m_inf*cos(xy_angle*pi/180)*    sin(xz_angle*pi/180)
+	
+CFDscale        -	actual length(in m)/CFD length
+OBSscale        -	acutal length(in m)/Observer length in obs.dat
+
+***Data
+impermeable     -	use 1 always. permeable version is not fully included
+periodic        -	=1 to make CFD data periodic, =0 to not 
+lowpass         -	=1 to use median and Gaussian lowpass filters to smoothen out CFD data
+BB_noise        -       =1 if broadband noise is calculated, =0 if not.
+
+2. "obs.dat" file
+
+Should contain the number of observers on the first line followed by the x,y,z locations of each observer on the next lines
+
+
+3. "surfaces/surface_*.dat" files
+
+Input files containing geometric and aerodynamic data are taken from HAMSTR and stored in "surfaces" directory. Each file should contain element data for a particular acoustic surface. The file name should have the following format.
+ 
+surface_[surface number].dat
+
+** surface number starts from 1
+
+Data needed in these files are as x, y, z locations, coefficient of surface pressure (CP), surface area (A), and the x, y, and z components of the unit normal vector.
+
+The input files should have the following format.  
+
+_______________________________________________________________________
+[Number of elements] [nTime] 
+[x] [y] [z] [CP] [A] [n_x] [n_y] [n_z]
+.........  ............  ........... .............................
+....
+....
+....
+....(end of all elements for the 1st time step)
+...
+...
+...(end of all elements for the 2nd time step)
+...
+...
+...
+...
+...
+...(end of all elements for all time steps)
+_______________________________________________________________________
+
+
+
+"read_surface.py" can be used to convert the "surfall_time***_domain*.dat" output files from HAMSTR to "surface_*.dat" ACUM input files. "read_surface_invSubdivide.py" will be reversing the subdivision done in MESHGEN_HAMSTR using the "emap_*.dat" files generated at the mesh generation stage. With the new HAMSTR update, it will be writing the "surface_*.dat" files directly.
+
+
+4. "input_BB" file
+
+This is the input file for broaband noise computation. Only required when the broadband noise is requested. Format is as follows.
+
+ACUM-3_Broadband_Inputs
+
+nSurf_BB        - Number of surfaces considered for broadband noise (cannot be more than the number of surfaces in the main input file)
+t_del           - =0 to use boundary layer (BL) thickness data from BB_surface_*.dat files; =1 to calculate BL thickness from 2D CFD data in BB_table_*.dat and cn/cc from BB_surface_*.dat; =2 to calculate BL thickness using empirical equations. 
+
+***Surface-1
+span(m)         - blade radius or wing span in m
+omega(rad/s)    - r0tational speed
+ccw             - =0 if clockwise rotation, =1 if counter-clockwise
+psi_offset      - azimuthal offset in degrees
+trip            - =1 if boundary layer is tripped =0 if not
+Initial_Position- defines initial position of the surface
+rotate          [x-rotation] [y-rotation] [z-rotatopn]  
+translate       [x-translation] [y-translation] [z-translation]
+
+***Surface-2
+.....
+
+
+5. "BB_inputs/BB_surface_*.dat" file
+
+This file cotains the spanwise data needed to calculate the broadband noise for the particular surface. These files are stored in the "BB_inputs" folder and are required only when the broadband noise is requested. The file name should have the following format.
+ 
+BB_surface_[surface number].dat
+
+** surface number starts from 1 and these surfaces and their order can be different from those used for tonal noise calculatiion. However, the number of surfaces should not exceed that of tonal noise calculation. 
+
+The file contains the non-dimensional radial (r/R), tangential (y/R), and vertical (z/R) locations of the blade/wing sections, chord (c/R), BL thickness (BLT), displacement thickness (DT), coefficients of normal (cn) and chordwise (cc) forces and blade pitch (theta).
+
+The input files should have the following format.  
+
+_______________________________________________________________________
+[number of time steps] [number of span sections] 
+[r/R] [y/R] [z/R] [c/R]
+....  ....  ....  ....
+....  ....  ....  .... 
+....  ....  ....  .... (up to number of span sections)
+[BLT_suction] [BLT_pressure] [DT_suction] [DT_pressure] [cn] [cc] [theta]
+..........
+.........
+.......... (up to number of span sections times number of time steps)
+-----------------------------------------------------------------------
+
+Notes: 
+	1. Normalization of cn and cc should be done using the tip Mach number for rotor blade. This is automatically adjusted inside the chord to reflect the local tangential velocity. For wings, it should be done using the freestream velocity.
+	2. BLT and DT are reqiured only when t_del=0. Otherwise these lines can be kept 0.
+
+6. "BB_inputs/BB_table_*.dat" files. These are required only when broadband noise is requested and 2D CFD tables are used in the computation. (ie. BB_noise=1 and t_del=1) Each BB_surface_*.dat file should have a corrsponding BB_table_*.dat file. Ham2D is used to create these. File format is as follows.
+
+___________________________________________________________________________
+VARIABLES="alpha","mach","cl","cd","cm","bl_upper",bl_lower","disp_upper","disp_lower","Re"
+[number of span sections] [number of AoA] [number of Mach] [number of Re]
+[nondimensitonal radial location of 1st span section]
+[alpha] [Mach] [cl] [cd] [cm] [bl_upper] [bl_lower] [disp_upper] [disp_lower] [Re]
+........
+.......
+....... (up to number of AoA * number of Mach * number of Re)
+[nondimensitonal radial location of 2nd span section]
+...
+...
+___________________________________________________________________________
+
+
+Note: Here, cl, cd, and cm should be nirmalized using the local freestream velocity (as per the definition). alpha should be in degrees. 
+
+
+$$__Compiling__$$
+
+Use the Makefile to compile the program. Make sure it has the correct path to the CUDA library.
+
+
+$$__Running__$$
+
+./acum_cuda
+
+
+							-dj-
+
+

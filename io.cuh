@@ -1,0 +1,10 @@
+void read_inputs(const char* inp_file);
+void get_grid_dims(const char* filname);
+void read_grid(const char* filname);
+void read_q(const char* filname);
+void read_cl(const char* cl_file,const char* cd_file,const char* cm_file);
+void read_observers(const char* filname);
+void writeTimeHistory(float* pT,float* pA,float* pP);
+void read_surf(int nsurf_ham);
+void read_BB_inputs(const char* inp_file_BB);
+void writeBBoutput(float* BBoaspl,float* BBspl);
