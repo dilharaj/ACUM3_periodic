@@ -15,8 +15,8 @@ CUDA_INSTALL_PATH ?= /usr/local/cuda
 CXX = gcc
 NVCC ?= $(CUDA_INSTALL_PATH)/bin/nvcc
 INCD = -I"$(CUDA_INSTALL_PATH)/include" -I"./"
-LIBS = -lgfortran -L"$(CUDA_INSTALL_PATH)/lib64" -lcudart -lcublas -lcufft
-NVCCFLAGS := -arch=sm_35 # --ptxas-options=-v -G -g 
+LIBS = -L"$(CUDA_INSTALL_PATH)/lib64" -lcudart -lcublas -lcufft
+NVCCFLAGS := -arch=sm_86 # --ptxas-options=-v -G -g 
 CXXFLAGS := -O3 
 
 

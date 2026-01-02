@@ -1,5 +1,5 @@
 // size parameters
-extern int nXtot,nNtot,nVtot,nUtot,nPRtot,tX,tN,tV,tU,tPR;
+extern int nXtot,nNtot,nVtot,nUtot,nPRtot,tX,tN,tV,tU,tPRi,nEtot;
 extern int* XPtr,* NPtr,* VPtr,* UPtr,* PRPtr,* E;
 
 extern int nX;
@@ -38,7 +38,7 @@ extern int iRHOdham;
 
 // input parameters
 extern float a0,rhoRef,pRef,oM,dPsi,Minf,Mref,xy_angle,xz_angle,CFDscale,OBSscale;
-extern int nSurf,periodic,lowpass,impermeable;
+extern int nSurf,nSurf_dum,periodic,lowpass,impermeable;
 
 // code variables
 extern float vInf[3];  

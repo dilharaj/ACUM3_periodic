@@ -4,7 +4,7 @@
 #include <math.h>
 #include "mathfunc.cuh"
 
-__global__ void findPressureTimeHistory(float* rObs,float* tObs,float* pT,float* pL,float* pA,float* Xham,float* Nham,float* Vham,float* PRham,int nSurf,int* XPtr,int* NPtr,int* VPtr,int* PRPtr,int* E,int nObs,int nTime, float dPsi,float dTau,float a0,float rhoRef,float* vInf, float oM);
+__global__ void findPressureTimeHistory(float* rObs,float* tObs,float* pT,float* pL,float* pA,float* Xham,float* Nham,float* Vham,float* PRham,int nSurf,int* XPtr,int* NPtr,int* VPtr,int* PRPtr,int* E,int nObs,int nTime, float dPsi,float dTau,float a0,float rhoRef,float* vInf, float oM,int *errorFlag);
 
 __device__ float acous_dist(float* src,float* obs,float* vinf,float a0);
 __device__ float sumprod(float* vec1,float* vec2);
@@ -15,7 +15,7 @@ __device__ int bsearch(float* A,float key, int imin, int imax);
 __device__ static int nX = 3, nXham = 4, nNham = 6, nVham = 6, nPRham = 2;
 __device__ static int iPR = 0,iPRd = 1,iVX = 0,iVdX = 3,iNX = 0,iNdX = 3,iDS = 3,iX = 0;
 
-__global__ void findPressureTimeHistory(float* rObs,float* tObs,float* pT,float* pL,float* pA,float* Xham,float* Nham,float* Vham,float* PRham,int nSurf,int* XPtr,int* NPtr,int* VPtr,int* PRPtr,int* E,int nObs,int nTime, float dPsi,float dTau,float a0,float rhoRef,float* vInf, float oM){
+__global__ void findPressureTimeHistory(float* rObs,float* tObs,float* pT,float* pL,float* pA,float* Xham,float* Nham,float* Vham,float* PRham,int nSurf,int* XPtr,int* NPtr,int* VPtr,int* PRPtr,int* E,int nObs,int nTime, float dPsi,float dTau,float a0,float rhoRef,float* vInf, float oM,int *errorFlag){
 
    float tau;
    int iXham;
@@ -38,27 +38,35 @@ __global__ void findPressureTimeHistory(float* rObs,float* tObs,float* pT,float*
    float wtm,wtp,ttemp,ttem,ttep;
   
    int itau = blockIdx.x*blockDim.x + threadIdx.x; // time step 
-  
- 
-  
+
    while(itau<nTime){ 
 
-   int iobs = blockIdx.y*blockDim.y + threadIdx.y; // Observer index  
+   int iobs = blockIdx.z*blockDim.z + threadIdx.z; // Observer index  
 
    //int iobs0 = 1; 
  
+
    while(iobs<nObs){
 
        obs[0] = rObs[iobs*nX+0]; obs[1] = rObs[iobs*nX+1]; obs[2] = rObs[iobs*nX+2];
        D1 = 1.0/(4.0*M_PI*a0);
-     
+ 
+       
               
        for (int i=0;i<nSurf;i++)
        {   
-   	   int j = blockIdx.z*blockDim.z + threadIdx.z; // elements
-    	   while (j<E[i])
+   	   int j = blockIdx.y*blockDim.y + threadIdx.y; // elements
+
+ 
+   //    	   printf("Testing1 %d\n",E[0]);
+
+
+	   while (j<E[i])
     	   {
 
+ 
+	//	if(j%1000==0) printf("BlockID: %d %d %d; ThreadID %d %d %d; iobs:%d itau:%d iel:%d E:%d\n",blockIdx.x,blockIdx.y,blockIdx.z,threadIdx.x,threadIdx.y,threadIdx.z,iobs,itau,j,E[0]);
+   
 
 		iXham = XPtr[i] + j*nTime*nXham + itau*nXham;
 		iNham = NPtr[i] + j*nTime*nNham + itau*nNham;
@@ -155,13 +163,14 @@ __global__ void findPressureTimeHistory(float* rObs,float* tObs,float* pT,float*
 
 		ttemp = (tau + r/a0)*oM;
 
-//if(j==10 && iobs ==0 && i==0){
-//
-//		//fprintf(fid,"%d %e %e\n",k+360*iChunk,v5[k],v5d[k]);
-// 	printf("%d %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e\n",itau,P,Pdot,LN,LF1,LF2,Modot_r,Mo_r,T1,T2,Mo_m,T3,Mr,M,T4,Lidot_r,Li_r);
-//
-//	
-//}
+
+		//if(j==10 && iobs ==0 && i==0){
+		//
+		//		//fprintf(fid,"%d %e %e\n",k+360*iChunk,v5[k],v5d[k]);
+		// 	printf("%d %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e\n",itau,P,Pdot,LN,LF1,LF2,Modot_r,Mo_r,T1,T2,Mo_m,T3,Mr,M,T4,Lidot_r,Li_r);
+		//
+		//	
+		//}
 
 		// Binning Approach //
 
@@ -207,6 +216,11 @@ __global__ void findPressureTimeHistory(float* rObs,float* tObs,float* pT,float*
 			iptm -= 1;
 			if(iptm<0) iptm = nTime - 1;
 
+	//		if(pT[iptm*nObs+iobs] > 1){
+	//			printf("iptm %d %d %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e\n",j,itau,P,Pdot,LN,LF1,LF2,Modot_r,Mo_r,T1,T2,Mo_m,T3,Mr,M,T4,Lidot_r,Li_r,TN,TF2,Ma_n,ds,a0,Man_dot,Mdot_r,pThick,pLoad);
+	//		*errorFlag = 1;
+	//		return;
+       	//		}
 		
 		}
 		
@@ -228,15 +242,16 @@ __global__ void findPressureTimeHistory(float* rObs,float* tObs,float* pT,float*
 			tObs2 += dPsi;
 			iptp += 1;
 			if(iptp>nTime-1) iptp = 0;
+		
+	//		if(pT[iptp*nObs+iobs] > 1){
+	//			printf("iptp %d %d %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e %e\n",j,itau,P,Pdot,LN,LF1,LF2,Modot_r,Mo_r,T1,T2,Mo_m,T3,Mr,M,T4,Lidot_r,Li_r,TN,TF2,Ma_n,ds,a0,Man_dot,Mdot_r,pThick,pLoad);
+	//			*errorFlag = 1;
+	//			return;
+	//		}
 		}
 
 
-//pT[itau*nObs+iobs] = N[0];
-//pL[itau*nObs+iobs] = N[1];
-//pA[itau*nObs+iobs] = N[2];
-
-
-		j += gridDim.z*blockDim.z;
+		j += gridDim.y*blockDim.y;
 
 		__syncthreads();
 
@@ -244,17 +259,17 @@ __global__ void findPressureTimeHistory(float* rObs,float* tObs,float* pT,float*
 
        } // close surface loop
 
-       iobs += gridDim.y*blockDim.y;
+       iobs += gridDim.z*blockDim.z;
 
        __syncthreads();
 	
-   }// if statement
+   }// iobs 
 
    itau += gridDim.x*blockDim.x;
 
    __syncthreads();	
 
-   }
+   } // itau
 
 } // close function loop
 

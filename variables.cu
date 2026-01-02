@@ -4,7 +4,7 @@
 #define VARS_H 
 
 // size parameters
-int nXtot,nNtot,nVtot,nUtot,nPRtot,tX,tN,tV,tU,tPR;
+int nXtot,nNtot,nVtot,nUtot,nPRtot,tX,tN,tV,tU,tPR,nEtot;
 int* qPtr,* XPtr,* NPtr,* VPtr,* UPtr,* PRPtr,* E;
 
 int nX = 3;
@@ -43,7 +43,7 @@ int iRHOdham   = 3;
 
 // input parameters
 float a0,rhoRef,pRef,oM,dPsi,Minf,Mref,xy_angle,xz_angle,CFDscale,OBSscale;
-int nSurf,periodic,lowpass,impermeable;
+int nSurf,nSurf_dum,periodic,lowpass,impermeable;
 
 // code variables
 

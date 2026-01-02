@@ -72,30 +72,6 @@ int main(void){
     printf("        time: %lf ms\n\n",elapsedTime);
 
 
-    printf("*** Reading Surface(s)\n\n");
-
-    // Read surface_*.dat files
-    read_surf(nSurf);
-
-    cudaEventRecord(stop3, 0);
-    cudaEventSynchronize(stop3);
-    cudaEventElapsedTime(&elapsedTime, stop2, stop3);
-    printf("        time: %lf ms\n\n",elapsedTime);
-
-
-    printf("*** Preprocessing variables\n\n");
-    if(impermeable==0) preprocess_per();
-    else if(impermeable==1) preprocess_imper();
-
-    printf("	Done.\n\n");
-    
-    cudaEventRecord(stop4, 0);
-    cudaEventSynchronize(stop4);
-    cudaEventElapsedTime(&elapsedTime, stop3, stop4);
-    printf("        time: %lf ms\n\n",elapsedTime);
-
-
- 
     // Variable Declaration    
     size_t size_tobs  = nTime*nObs*sizeof(float);
     size_t size_time  = nTime*sizeof(float);
@@ -121,12 +97,12 @@ int main(void){
  
     // Initialization
     for(int t=0;t<nTime;t++){ 
-        tObs[t] = t*dPsi;
-        for(int iobs=0;iobs<nObs;iobs++){
-            pT[t*nObs+iobs] = 0.0;
-            pL[t*nObs+iobs] = 0.0;
-            pA[t*nObs+iobs] = 0.0;
-        }
+	tObs[t] = t*dPsi;
+	for(int iobs=0;iobs<nObs;iobs++){
+	    pT[t*nObs+iobs] = 0.0;
+	    pL[t*nObs+iobs] = 0.0;
+	    pA[t*nObs+iobs] = 0.0;
+	}
     }
 
     for(int iobs=0; iobs<nObs; iobs++)
@@ -136,10 +112,187 @@ int main(void){
 	{
 	    for (int j=0; j<7; j++)
 	    {
-	    	BBspl[iobs*nf2*7+i*7+j] = -100.0;
+		BBspl[iobs*nf2*7+i*7+j] = -100.0;
 	    }
 	}
     }
+
+    cudaMemcpy(vInf_gpu,vInf,3*sizeof(float),cudaMemcpyHostToDevice);
+    cudaMemcpy(pT_gpu,pT,size_tobs,cudaMemcpyHostToDevice);
+    cudaMemcpy(pL_gpu,pL,size_tobs,cudaMemcpyHostToDevice);
+    cudaMemcpy(pA_gpu,pA,size_tobs,cudaMemcpyHostToDevice);
+    cudaMemcpy(tObs_gpu,tObs,size_time,cudaMemcpyHostToDevice);
+    cudaMemcpy(rObs_gpu,rObs,size_obs,cudaMemcpyHostToDevice);
+	
+
+    // Looping through surfaces
+
+    for(int iSurf=0; iSurf<nSurf; iSurf++){
+
+	    printf("*** Reading Surface(s)\n\n");
+
+	    // Read surface_*.dat files
+	    read_surf(iSurf);
+
+	    cudaEventRecord(stop3, 0);
+	    cudaEventSynchronize(stop3);
+	    cudaEventElapsedTime(&elapsedTime, stop2, stop3);
+	    printf("        time: %lf ms\n\n",elapsedTime);
+
+
+	    printf("*** Preprocessing variables\n\n");
+	    if(impermeable==0) preprocess_per();
+	    else if(impermeable==1) preprocess_imper();
+
+	    printf("	Done.\n\n");
+	    
+	    cudaEventRecord(stop4, 0);
+	    cudaEventSynchronize(stop4);
+	    cudaEventElapsedTime(&elapsedTime, stop3, stop4);
+	    printf("        time: %lf ms\n\n",elapsedTime);
+
+
+	
+
+	 
+    
+	    
+	    int* XPtr_g; cudaMalloc(&XPtr_g,size_surf);
+	    int* NPtr_g; cudaMalloc(&NPtr_g,size_surf);
+	    int* VPtr_g; cudaMalloc(&VPtr_g,size_surf);
+	    int* PRPtr_g; cudaMalloc(&PRPtr_g,size_surf);
+	    int* E_g; cudaMalloc(&E_g,size_surf);
+	    
+	    cudaMemcpy(XPtr_g,XPtr,size_surf,cudaMemcpyHostToDevice);
+	    cudaMemcpy(NPtr_g,NPtr,size_surf,cudaMemcpyHostToDevice);
+	    cudaMemcpy(VPtr_g,VPtr,size_surf,cudaMemcpyHostToDevice);
+	    cudaMemcpy(PRPtr_g,PRPtr,size_surf,cudaMemcpyHostToDevice);
+	    cudaMemcpy(E_g,E,size_surf,cudaMemcpyHostToDevice);
+
+	    float* Xham_gpu; cudaMalloc(&Xham_gpu,nXtot*sizeof(float));
+	    float* Nham_gpu; cudaMalloc(&Nham_gpu,nNtot*sizeof(float));
+	    float* Vham_gpu; cudaMalloc(&Vham_gpu,nVtot*sizeof(float));
+	    float* PRham_gpu; cudaMalloc(&PRham_gpu,nPRtot*sizeof(float));
+	    
+	    cudaMemcpy(Xham_gpu,Xham,nXtot*sizeof(float),cudaMemcpyHostToDevice);
+	    cudaMemcpy(Nham_gpu,Nham,nNtot*sizeof(float),cudaMemcpyHostToDevice);
+	    cudaMemcpy(Vham_gpu,Vham,nVtot*sizeof(float),cudaMemcpyHostToDevice);
+	    cudaMemcpy(PRham_gpu,PRham,nPRtot*sizeof(float),cudaMemcpyHostToDevice);
+
+	    if(impermeable==0){
+
+		int* UPtr_g; cudaMalloc(&UPtr_g,size_surf);
+		cudaMemcpy(UPtr_g,UPtr,size_surf,cudaMemcpyHostToDevice);
+		float* Uham_gpu; cudaMalloc(&Uham_gpu,nUtot*sizeof(float));
+		cudaMemcpy(Uham_gpu,Uham,nUtot*sizeof(float),cudaMemcpyHostToDevice);
+	    }
+
+	    // Parallelization
+	    //int ntpb_x = 4; // time steps
+	    //int ntpb_y = 32; // elements
+	    //int ntpb_z = 2;  // observers
+	   
+	    int ntpb_x = 360; // time steps
+	    int ntpb_y = 1; // elements
+	    int ntpb_z = 1;  // observers
+	   
+
+	   
+	    int nbx_max = 512;
+	    int nby_max = 512;
+	    int nbz_max = 512;
+
+
+	    //// Time steps
+	    //int nb_t = round(float(nTime/ntpb_x) + 0.5f);
+	    //if (nb_t>nbx_max) nb_t = nbx_max;
+	    //int ntpb_t = ntpb_x;
+	    //if (nTime<ntpb_t){
+	    //    ntpb_t = nTime;
+	    //    nb_t = 1;
+	    //}
+	    //// Observers
+	    //int nb_ob = round(float(nObs/ntpb_z) + 0.5f);
+	    //if (nb_ob>nbz_max) nb_ob = nbz_max;
+	    //int ntpb_ob = ntpb_z;
+	    //if (nObs<ntpb_ob){
+	    //    ntpb_ob = nObs;
+	    //    nb_ob = 1;
+	    //}
+	    //// elements
+	    //int nb_el = nby_max;
+	    //int ntpb_el = ntpb_y;
+
+
+	    // Time steps
+	    int nb_t = (nTime + ntpb_x - 1) / ntpb_x;
+	    if(nb_t>nbx_max){
+		nb_t = nbx_max;
+	    }
+	    int ntpb_t = ntpb_x;
+	    if(nTime<ntpb_t){
+		    ntpb_t = nTime;
+		    nb_t = 1;
+	    }
+	    // Elements
+	    int nb_el = (nEtot + ntpb_y - 1) / ntpb_y;
+	    if(nb_t>nby_max) nb_el = nby_max;
+	    int ntpb_el = ntpb_y;
+	    if(nEtot<ntpb_el){
+		    ntpb_el = nEtot;
+		    nb_el = 1;
+	    }
+	    // Observers
+	    int nb_ob = (nObs + ntpb_z - 1) / ntpb_z;
+	    if(nb_ob>nbz_max) nb_ob = nbz_max;
+	    int ntpb_ob = ntpb_z;
+	    if(nObs<ntpb_ob){
+		    ntpb_ob = nObs;
+		    nb_ob = 1;
+	    }  
+
+
+	    printf("\n*** GPU calculation ...\n");
+	   
+	    printf("\n      BLOCK/THREAD splitting \n\n");
+	     
+	    printf("          Time steps: %d / %d\n",nb_t,ntpb_t);
+	    printf("          Observers:  %d / %d\n",nb_ob,ntpb_ob);
+	    printf("          Elements:   %d / %d\n\n",nb_el,ntpb_el);
+
+	    dim3 blocksPerGrid(nb_t,nb_el,nb_ob);
+	    dim3 threadsPerBlock(ntpb_t,ntpb_el,ntpb_ob);
+
+	    int *d_errorFlag, h_errorFlag = 0;
+    	    cudaMalloc(&d_errorFlag, sizeof(int));
+	    cudaMemcpy(d_errorFlag, &h_errorFlag, sizeof(int), cudaMemcpyHostToDevice);
+
+
+
+	    if(impermeable==1) findPressureTimeHistory<<<blocksPerGrid,threadsPerBlock>>>(rObs_gpu,tObs_gpu,pT_gpu,pL_gpu,pA_gpu,Xham_gpu,Nham_gpu,Vham_gpu,PRham_gpu,nSurf_dum,XPtr_g,NPtr_g,VPtr_g,PRPtr_g,E_g,nObs,nTime,dPsi,dTau,a0,rhoRef,vInf_gpu,oM,d_errorFlag);
+	   
+	    cudaMemcpy(&h_errorFlag, d_errorFlag, sizeof(int), cudaMemcpyDeviceToHost);
+
+	    if (h_errorFlag) {
+	        printf("GPU error detected. Exiting...\n");
+	        exit(1);
+	    }
+
+	    cudaEventRecord(stop5, 0);
+	    cudaEventSynchronize(stop5);
+	    cudaEventElapsedTime(&elapsedTime, stop4, stop5);
+	    printf("      GPU time: %lf ms\n\n",elapsedTime);
+
+
+	  	
+	    cudaFree(Xham_gpu);cudaFree(Nham_gpu);cudaFree(Vham_gpu);cudaFree(PRham_gpu);
+    	    cudaFree(XPtr_g);cudaFree(NPtr_g);cudaFree(VPtr_g);cudaFree(PRPtr_g);cudaFree(E_g);
+ 	    free(Xham);free(Nham);free(Vham);free(Uham);free(PRham);
+   	    free(XPtr);free(NPtr);free(VPtr);free(UPtr);free(PRPtr);free(E);
+
+
+    } // nSurf
+     
 
 	// CPU Broadband noise calculation
 
@@ -151,121 +304,26 @@ int main(void){
     }
 
 
-
- 
-    cudaMemcpy(vInf_gpu,vInf,3*sizeof(float),cudaMemcpyHostToDevice);
-    cudaMemcpy(pT_gpu,pT,size_tobs,cudaMemcpyHostToDevice);
-    cudaMemcpy(pL_gpu,pL,size_tobs,cudaMemcpyHostToDevice);
-    cudaMemcpy(pA_gpu,pA,size_tobs,cudaMemcpyHostToDevice);
-    cudaMemcpy(tObs_gpu,tObs,size_time,cudaMemcpyHostToDevice);
-    cudaMemcpy(rObs_gpu,rObs,size_obs,cudaMemcpyHostToDevice);
-    
-    
-    int* XPtr_g; cudaMalloc(&XPtr_g,size_surf);
-    int* NPtr_g; cudaMalloc(&NPtr_g,size_surf);
-    int* VPtr_g; cudaMalloc(&VPtr_g,size_surf);
-    int* PRPtr_g; cudaMalloc(&PRPtr_g,size_surf);
-    int* E_g; cudaMalloc(&E_g,size_surf);
-    
-    cudaMemcpy(XPtr_g,XPtr,size_surf,cudaMemcpyHostToDevice);
-    cudaMemcpy(NPtr_g,NPtr,size_surf,cudaMemcpyHostToDevice);
-    cudaMemcpy(VPtr_g,VPtr,size_surf,cudaMemcpyHostToDevice);
-    cudaMemcpy(PRPtr_g,PRPtr,size_surf,cudaMemcpyHostToDevice);
-    cudaMemcpy(E_g,E,size_surf,cudaMemcpyHostToDevice);
-
-    float* Xham_gpu; cudaMalloc(&Xham_gpu,nXtot*sizeof(float));
-    float* Nham_gpu; cudaMalloc(&Nham_gpu,nNtot*sizeof(float));
-    float* Vham_gpu; cudaMalloc(&Vham_gpu,nVtot*sizeof(float));
-    float* PRham_gpu; cudaMalloc(&PRham_gpu,nPRtot*sizeof(float));
-    
-    cudaMemcpy(Xham_gpu,Xham,nXtot*sizeof(float),cudaMemcpyHostToDevice);
-    cudaMemcpy(Nham_gpu,Nham,nNtot*sizeof(float),cudaMemcpyHostToDevice);
-    cudaMemcpy(Vham_gpu,Vham,nVtot*sizeof(float),cudaMemcpyHostToDevice);
-    cudaMemcpy(PRham_gpu,PRham,nPRtot*sizeof(float),cudaMemcpyHostToDevice);
-
-    if(impermeable==0){
-
-    	int* UPtr_g; cudaMalloc(&UPtr_g,size_surf);
-	cudaMemcpy(UPtr_g,UPtr,size_surf,cudaMemcpyHostToDevice);
-	float* Uham_gpu; cudaMalloc(&Uham_gpu,nUtot*sizeof(float));
-	cudaMemcpy(Uham_gpu,Uham,nUtot*sizeof(float),cudaMemcpyHostToDevice);
-    }
-
-    // Parallelization
-    int ntpb_x = 8; // time steps
-    int ntpb_y = 4; // observers
-    int ntpb_z = 8;  // elements
-    int nbx_max = 512;
-    int nby_max = 512;
-    int nbz_max = 512;
-
-
-    // Time steps
-    int nb_t = round(float(nTime/ntpb_x) + 0.5f);
-    if (nb_t>nbx_max) nb_t = nbx_max;
-    int ntpb_t = ntpb_x;
-    if (nTime<ntpb_t){
-        ntpb_t = nTime;
-        nb_t = 1;
-    }
-    // Observers
-    int nb_ob = round(float(nObs/ntpb_y) + 0.5f);
-    if (nb_ob>nby_max) nb_ob = nby_max;
-    int ntpb_ob = ntpb_y;
-    if (nObs<ntpb_ob){
-        ntpb_ob = nObs;
-        nb_ob = 1;
-    }
-    // elements
-    int nb_el = nbz_max;
-    int ntpb_el = ntpb_z;
-
-
-    printf("\n*** GPU calculation ...\n");
-   
-    printf("\n      BLOCK/THREAD splitting \n\n");
-     
-    printf("          Time steps: %d / %d\n",nb_t,ntpb_t);
-    printf("          Observers:  %d / %d\n",nb_ob,ntpb_ob);
-    printf("          Elements:   %d / %d\n\n",nb_el,ntpb_el);
-
-    dim3 blocksPerGrid(nb_t,nb_ob,nb_el);
-    dim3 threadsPerBlock(ntpb_t,ntpb_ob,ntpb_el);
-
-    
-    if(impermeable==1) findPressureTimeHistory<<<blocksPerGrid,threadsPerBlock>>>(rObs_gpu,tObs_gpu,pT_gpu,pL_gpu,pA_gpu,Xham_gpu,Nham_gpu,Vham_gpu,PRham_gpu,nSurf,XPtr_g,NPtr_g,VPtr_g,PRPtr_g,E_g,nObs,nTime,dPsi,dTau,a0,rhoRef,vInf_gpu,oM);
-   
-    cudaEventRecord(stop5, 0);
-    cudaEventSynchronize(stop5);
-    cudaEventElapsedTime(&elapsedTime, stop4, stop5);
-    printf("      GPU time: %lf ms\n\n",elapsedTime);
-
+    printf("*** Writing output files\n\n");
 
     // copy solutions from device to host
     cudaMemcpy(pT,pT_gpu,size_tobs,cudaMemcpyDeviceToHost);
     cudaMemcpy(pL,pL_gpu,size_tobs,cudaMemcpyDeviceToHost);
     cudaMemcpy(pA,pA_gpu,size_tobs,cudaMemcpyDeviceToHost);
-   
+	
 
 
-
-     
-    printf("*** Writing output files\n\n");
     writeTimeHistory(pT,pL,pA);
     
     if(BB_noise==1) writeBBoutput(BBoaspl,BBspl);  
  
    // Deallocate memory
-    cudaFree(Xham_gpu);cudaFree(Nham_gpu);cudaFree(Vham_gpu);cudaFree(PRham_gpu);
     cudaFree(pT_gpu);cudaFree(pL_gpu);cudaFree(pA_gpu);cudaFree(rObs_gpu);cudaFree(tObs_gpu);cudaFree(vInf_gpu);
-    cudaFree(XPtr_g);cudaFree(NPtr_g);cudaFree(VPtr_g);cudaFree(PRPtr_g);cudaFree(E_g);
-    //if(impermeable==0) cudaFree(Uham_gpu);cudaFree(UPtr_g);
+     //if(impermeable==0) cudaFree(Uham_gpu);cudaFree(UPtr_g);
     
-    free(Xham);free(Nham);free(Vham);free(Uham);free(PRham);
     free(pT);free(pL);free(pA);free(tObs);
-    free(XPtr);free(NPtr);free(VPtr);free(UPtr);free(PRPtr);free(E);
-
-//    if(BB_noise==1) 
+   
+    //    if(BB_noise==1) 
 //    {
 //        free(BBspl);free(BBoaspl);free(span);free(omega);free(ccw);free(psi_offset);free(trip);free(rotate);free(translate);free(xsPtr);free(dsPtr);free(nsect);free(xyzcR);free(bbdata);free(nsect_t);free(nmach_t);free(naoa_t);free(nre_t);free(aPtr);free(mPtr);free(rPtr);free(sPtr);free(dPtr);free(sect_t);free(mach_t);free(aoa_t);free(re_t);free(bbdata_t);free(ff);
 //    }

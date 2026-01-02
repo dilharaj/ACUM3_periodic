@@ -47,7 +47,7 @@ void preprocess_per(){
 	
 	
 
-	for (int i=0;i<nSurf;i++)
+	for (int i=0;i<nSurf_dum;i++)
 	{
 		for(int j=0;j<E[i]*nTime;j++)
 		{
@@ -264,7 +264,7 @@ void preprocess_imper(){
 	
 	
 
-	for (int i=0;i<nSurf;i++)
+	for (int i=0;i<nSurf_dum;i++)
 	{
 		for(int j=0;j<E[i]*nTime;j++)
 		{
@@ -291,6 +291,12 @@ void preprocess_imper(){
 				iXh = XPtr[i] + j*nTime*nXham + k*nXham;
 				iNh = NPtr[i] + j*nTime*nNham + k*nNham;
 				iPRh = PRPtr[i] + j*nTime*nPRham + k*nPRham;
+
+
+			//	// modification for steady case
+			//	int iPRh0 = PRPtr[i] + j*nTime*nPRham + 0*nPRham;
+			//	PRham[iPRh+iPRham] = PRham[iPRh0+iPRham];
+			//	////
 
 				v5[k] = PRham[iPRh+iPRham];
 				// modification - if motion is around x-axis 
@@ -362,18 +368,18 @@ void preprocess_imper(){
 			differentiate(v_x,vd_x,dTau,nTime);
 			differentiate(v_y,vd_y,dTau,nTime);
 			differentiate(v_z,vd_z,dTau,nTime);
-
-//if(j==10){
-//	FILE *fid;
-//	
-//	fid = fopen("test_peri.dat","a");
-//	for(int k=0;k<nTime;k++){
-//		//fprintf(fid,"%d %e %e\n",k+360*iChunk,v5[k],v5d[k]);
-//		fprintf(fid,"%d %e %e %e %e %e %e %e %e %e %e %e %e %e\n",k,x[k],y[k],z[k],v_x[k],v_y[k],v_z[k],vd_x[k],vd_y[k],vd_z[k],nd_x[k],nd_y[k],nd_z[k],v5d[k]);
 //
-//	}
-//	fclose(fid);
-//}
+if(j==10){
+	FILE *fid;
+	
+	fid = fopen("test_peri.dat","a");
+	for(int k=0;k<nTime;k++){
+		//fprintf(fid,"%d %e %e\n",k+360*iChunk,v5[k],v5d[k]);
+		fprintf(fid,"%d %e %e %e %e %e %e %e %e %e %e %e %e %e\n",k,x[k],y[k],z[k],v_x[k],v_y[k],v_z[k],vd_x[k],vd_y[k],vd_z[k],nd_x[k],nd_y[k],nd_z[k],v5d[k]);
+
+	}
+	fclose(fid);
+}
 			
 			for (int k=0;k<nTime;k++)
 			{

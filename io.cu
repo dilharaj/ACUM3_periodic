@@ -3,17 +3,117 @@
 #include <time.h>
 #include <math.h>
 #include <fstream>
-using std::ifstream;
+//using std::ifstream;
 #include <string>
-using std::string;
+//using std::string;
 #include "variables.cuh"
 #include "mathfunc.cuh"
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <cmath>
+#include <stdexcept>
+#include <iostream>
+
+
+inline void skipSpace(const char*& p) {
+    while (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r') ++p;
+}
+
+inline float parseFloat(const char*& p) {
+    bool neg = false;
+    if (*p == '-') { neg = true; ++p; }
+    else if (*p == '+') ++p;
+
+    float val = 0.0f;
+    while (*p >= '0' && *p <= '9') {
+        val = val * 10.0f + (*p - '0');
+        ++p;
+    }
+
+    if (*p == '.') {
+        ++p;
+        float frac = 1.0f;
+        while (*p >= '0' && *p <= '9') {
+            frac *= 0.1f;
+            val += (*p - '0') * frac;
+            ++p;
+        }
+    }
+
+    if (*p == 'e' || *p == 'E') {
+        ++p;
+        bool negExp = false;
+        if (*p == '-') { negExp = true; ++p; }
+        else if (*p == '+') ++p;
+        int exp = 0;
+        while (*p >= '0' && *p <= '9') {
+            exp = exp * 10 + (*p - '0');
+            ++p;
+        }
+        val *= powf(10.0f, negExp ? -exp : exp);
+    }
+
+    return neg ? -val : val;
+}
+
+void readSurfaceFileFast(const std::string& filename,
+                         int& E_i,
+                         int& nt,
+                         float* Xham, float* Uham, float* PRham, float* Nham,
+                         int XPtr_i, int NPtr_i, int UPtr_i, int PRPtr_i,
+                         int nTime, int nXham, int nUham, int nNham, int nPRham,
+                         int iXham, int iYham, int iZham,
+                         int iUXham, int iUYham, int iUZham,
+                         int iPRham, int iRHOham, int iDSham,
+                         int iNXham, int iNYham, int iNZham)
+{
+    int fd = open(filename.c_str(), O_RDONLY);
+    if (fd < 0) throw std::runtime_error("Cannot open file: " + filename);
+
+    struct stat sb;
+    fstat(fd, &sb);
+    size_t size = sb.st_size;
+
+    const char* p = (const char*)mmap(nullptr, size, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (p == MAP_FAILED) throw std::runtime_error("mmap failed: " + filename);
+
+    skipSpace(p);
+    E_i = (int)parseFloat(p);
+    skipSpace(p);
+    nt = (int)parseFloat(p);
+    skipSpace(p);
+
+    std::cout << filename << std::endl;
+    printf("Number of Elements: %d, Number of time steps: %d\n",E_i,nt);
+    for (int k = 0; k < nTime; k++) {
+	    //printf("Time step: %d\n",k+1);
+    	    for (int j = 0; j < E_i; j++) {
+		    int iXh = XPtr_i + j*nTime*nXham + k*nXham;
+		    int iNh = NPtr_i + j*nTime*nNham + k*nNham;
+		    int iPRh = PRPtr_i + j*nTime*nPRham + k*nPRham;
+
+		    Xham[iXh + iXham]   = parseFloat(p); skipSpace(p);
+		    Xham[iXh + iYham]   = parseFloat(p); skipSpace(p);
+		    Xham[iXh + iZham]   = parseFloat(p); skipSpace(p);
+		    PRham[iPRh + iPRham] = parseFloat(p); skipSpace(p);
+		    Xham[iXh + iDSham]   = parseFloat(p); skipSpace(p);
+		    Nham[iNh + iNXham]   = parseFloat(p); skipSpace(p);
+		    Nham[iNh + iNYham]   = parseFloat(p); skipSpace(p);
+		    Nham[iNh + iNZham]   = parseFloat(p); skipSpace(p);
+             }
+    }
+
+    munmap((void*)p, size);
+    close(fd);
+}
 
 void read_inputs(const char* inp_file){
 
-     string dat;
+     std::string dat;
 
-     ifstream inpfile(inp_file);
+     std::ifstream inpfile(inp_file);
 
      if (!inpfile){
         printf("No input file found\n");
@@ -203,8 +303,9 @@ void writeTimeHistory(float* pT,float* pL,float* pA)
 }
 
 
-void read_surf(int nSurf)
+void read_surf(int iSurf)
 {
+	nSurf_dum = 1; // process surface by surface
 	#define filenametemplate "surfaces/surface_%d.dat"
 	XPtr = (int*)malloc(nSurf*sizeof(int));
 	XPtr[0] = 0;
@@ -224,11 +325,24 @@ void read_surf(int nSurf)
 	float* Area = (float*)malloc(nSurf*sizeof(float));
 	etot = 0;
 	//static const char* const filename[] = {"surfaces/surface_1.dat","surfaces/surface_2.dat","surfaces/surface_3.dat","surfaces/surface_4.dat","surfaces/surface_5.dat","surfaces/surface_6.dat","surfaces/surface_7.dat","surfaces/surface_8.dat","surfaces/surface_9.dat","surfaces/surface_10.dat"};
-	
-	for (int i=0; i<nSurf; i++)
+
+	// quick fix
+	for (int i=0; i<nSurf; i++){
+		XPtr[i] = 0;
+		NPtr[i] = 0;
+		VPtr[i] = 0;
+		UPtr[i] = 0;
+		PRPtr[i] = 0;
+		E[i] = 0;
+		Area[i] = 0;
+	}
+
+
+
+	for (int i=0; i<nSurf_dum; i++)
 	{
 		char fname[100];
-		sprintf(fname,filenametemplate,i+1);
+		sprintf(fname,filenametemplate,iSurf+1);
 
 		printf("%s\n",fname);
 		FILE* fid = fopen(fname,"r");
@@ -240,7 +354,7 @@ void read_surf(int nSurf)
 		}
 		
 		etot += E[i];
-		if(i<nSurf-1){
+		if(i<nSurf_dum-1){
 			XPtr[i+1] = XPtr[i] + nXham*E[i]*nTime;
 			NPtr[i+1] = NPtr[i] + nNham*E[i]*nTime;
 			VPtr[i+1] = VPtr[i] + nVham*E[i]*nTime;
@@ -249,6 +363,7 @@ void read_surf(int nSurf)
 		}
 	}
 
+	nEtot = etot;
  	nXtot = etot*nXham*nTime;
 	Xham = (float*)malloc(nXtot*sizeof(float));
 	nNtot = etot*nNham*nTime;
@@ -262,11 +377,11 @@ void read_surf(int nSurf)
 
 	if(impermeable==0){	
 	  
-	  for (int i=0; i<nSurf;i++)
+	  for (int i=0; i<nSurf_dum;i++)
 	  {
 		
        		char fname[100];
-		sprintf(fname,filenametemplate,i+1);
+		sprintf(fname,filenametemplate,iSurf+1);
 
 
 		FILE* fid = fopen(fname,"r");
@@ -294,39 +409,55 @@ void read_surf(int nSurf)
 
 	}else if(impermeable==1){
 
-	  for (int i=0; i<nSurf;i++)
-	  {
-		
-            	char fname[100];
-		sprintf(fname,filenametemplate,i+1);
+		for (int i = 0; i < nSurf_dum; i++) {
+		    char fname[100];
+		    sprintf(fname, filenametemplate, iSurf + 1);
 
+		    readSurfaceFileFast(fname,
+					E[i], nt,
+					Xham, Uham, PRham, Nham,
+					XPtr[i], NPtr[i], UPtr[i], PRPtr[i],
+					nTime, nXham, nUham, nNham, nPRham,
+					iXham, iYham, iZham,
+					iUXham, iUYham, iUZham,
+					iPRham, iRHOham, iDSham,
+					iNXham, iNYham, iNZham);
 
-		FILE* fid = fopen(fname,"r");
-
-	    fscanf(fid, "%d %d\n", &E[i],&nt);
-
-	    for (int k=0; k<nTime; k++)
-	    {  
-		for (int j=0; j<E[i]; j++)
-		{
-		  iXh = XPtr[i] + j*nTime*nXham + k*nXham;
-		  iNh = NPtr[i] + j*nTime*nNham + k*nNham;
-  		  //iVh = VPtr[i] + j*nTime*nVham + k*nVham;
-	//	  iUh = UPtr[i] + j*nTime*nUham + k*nUham;
-		  iPRh = PRPtr[i] + j*nTime*nPRham + k*nPRham;
-
-     	          fscanf(fid,"%f %f %f %f %f %f %f %f\n",&Xham[iXh+iXham],&Xham[iXh+iYham],&Xham[iXh+iZham],&PRham[iPRh+iPRham],&Xham[iXh+iDSham],&Nham[iNh+iNXham],&Nham[iNh+iNYham],&Nham[iNh+iNZham]);
-
+		    printf("    Done reading %s with %d elements\n", fname, E[i]);
 		}
 
+	 // for (int i=0; i<nSurf_dum;i++)
+	 // {
+	 //       
+         //   	char fname[100];
+	 //       sprintf(fname,filenametemplate,iSurf+1);
 
-	    }
-	    fclose(fid);
-	    printf("	Done reading %s with %d elements\n",fname,E[i]);
 
+	 //       FILE* fid = fopen(fname,"r");
+
+	 //   fscanf(fid, "%d %d\n", &E[i],&nt);
+
+	 //   for (int k=0; k<nTime; k++)
+	 //   {
+	 //       printf("Time step: %d\n",k+1);  
+	 //       for (int j=0; j<E[i]; j++)
+	 //       {
+	 //         iXh = XPtr[i] + j*nTime*nXham + k*nXham;
+	 //         iNh = NPtr[i] + j*nTime*nNham + k*nNham;
+  	 //         //iVh = VPtr[i] + j*nTime*nVham + k*nVham;
+	////	  iUh = UPtr[i] + j*nTime*nUham + k*nUham;
+	 //         iPRh = PRPtr[i] + j*nTime*nPRham + k*nPRham;
+
+     	 //         fscanf(fid,"%f %f %f %f %f %f %f %f\n",&Xham[iXh+iXham],&Xham[iXh+iYham],&Xham[iXh+iZham],&PRham[iPRh+iPRham],&Xham[iXh+iDSham],&Nham[iNh+iNXham],&Nham[iNh+iNYham],&Nham[iNh+iNZham]);
+
+	 //       }
+
+
+	 //   }
+	 //   fclose(fid);
+	 //   printf("	Done reading %s with %d elements\n",fname,E[i]);
 	
-	
-	  }
+	 // }
 	}
 	free(Area);	
 	printf("\n");
@@ -343,9 +474,9 @@ void read_BB_inputs(const char* inp_file)
 	//// READ INPUT FILE ////
 
 	
-	string dat;
+	std::string dat;
 	
-	ifstream inpfile(inp_file);
+	std::ifstream inpfile(inp_file);
 
      	if (!inpfile){
         	printf("No broadband input file found\n");
